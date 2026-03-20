@@ -111,6 +111,22 @@ const DROP_TABLE = [
   { itemId:'ar2',    chance:0.04 },
 ];
 
+// Player avatar choices
+const PLAYER_AVATARS = [
+  { id:'knight',  e:'🧙', name:'Mage'     },
+  { id:'warrior', e:'⚔️',  name:'Warrior'  },
+  { id:'ninja',   e:'🥷', name:'Ninja'    },
+  { id:'archer',  e:'🏹', name:'Archer'   },
+  { id:'witch',   e:'🧟', name:'Undead'   },
+  { id:'elf',     e:'🧝', name:'Elf'      },
+  { id:'dwarf',   e:'👷', name:'Dwarf'    },
+  { id:'pirate',  e:'🫅', name:'Noble'    },
+  { id:'zombie',  e:'🤺', name:'Duelist'  },
+  { id:'alien',   e:'👽', name:'Alien'    },
+  { id:'robot',   e:'🤖', name:'Mech'     },
+  { id:'dragon',  e:'🐲', name:'Dragonkin'},
+];
+
 // How far (meters) player must be to trigger encounter
 const ENGAGE_RANGE = 45;
 
