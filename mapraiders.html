@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MapRaiders ⚔️</title>
+<link rel="manifest" href="data:application/json,{}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#07070f;--surface:#101020;--card:#16162a;--border:#252540;
+  --gold:#f0c040;--gold-dim:#7a5f10;--green:#28d460;--red:#e03050;
+  --blue:#3a80ff;--purple:#9060e0;--cyan:#20d4f0;
+  --text:#ddd0c0;--text-dim:#706050;
+  --ff-title:'Cinzel Decorative',serif;--ff-ui:'Rajdhani',sans-serif;--ff-body:'Cinzel',serif;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--ff-ui);touch-action:manipulation;user-select:none}
+
+/* === MAP === */
+#map{position:fixed;inset:0;z-index:0}
+.leaflet-tile{filter:brightness(.65) saturate(.7) hue-rotate(20deg)}
+.leaflet-control-attribution{display:none}
+
+/* === TOP HUD === */
+#top-hud{
+  position:fixed;top:0;left:0;right:0;z-index:500;
+  padding:max(14px,env(safe-area-inset-top)) 14px 28px;
+  background:linear-gradient(to bottom,rgba(7,7,15,.97) 60%,transparent);
+  pointer-events:none;
+}
+#hud-row1{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+#hud-title{font-family:var(--ff-title);font-size:13px;color:var(--gold);text-shadow:0 0 12px rgba(240,192,64,.6);flex:1}
+.hud-chip{
+  display:flex;align-items:center;gap:4px;
+  background:rgba(7,7,15,.85);border:1px solid var(--border);border-radius:99px;
+  padding:4px 10px;font-size:12px;font-weight:700;pointer-events:all;
+}
+.hud-chip.gold{color:var(--gold)}
+.hud-chip.lvl{color:var(--purple)}
+#hud-hp-row{display:flex;align-items:center;gap:8px}
+#hud-hp-label{font-size:11px;color:var(--text-dim);white-space:nowrap;min-width:90px}
+#hud-hp-track{flex:1;height:7px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;border:1px solid var(--border)}
+#hud-hp-fill{height:100%;background:linear-gradient(90deg,#c02038,#28d460);border-radius:4px;transition:width .35s}
+
+/* === BIOME BADGE === */
+#biome-badge{
+  position:fixed;top:max(74px,env(safe-area-inset-top)+60px);left:50%;transform:translateX(-50%);z-index:500;
+  background:rgba(7,7,15,.88);border:1px solid var(--border);border-radius:99px;
+  padding:4px 14px;font-size:11px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;pointer-events:none;
+  transition:all .4s;
+}
+
+/* === LOCATE BTN === */
+#locate-btn{
+  position:fixed;bottom:calc(72px + env(safe-area-inset-bottom,0px) + 14px);right:14px;z-index:500;
+  width:46px;height:46px;border-radius:50%;
+  background:rgba(7,7,15,.9);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;
+  transition:transform .15s;box-shadow:0 4px 20px rgba(0,0,0,.5);
+}
+#locate-btn:active{transform:scale(.88)}
+
+/* === SPAWN BTN === */
+#spawn-btn{
+  position:fixed;bottom:calc(72px + env(safe-area-inset-bottom,0px) + 68px);right:14px;z-index:500;
+  width:46px;height:46px;border-radius:50%;
+  background:rgba(224,48,80,.15);border:1px solid rgba(224,48,80,.4);
+  display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;
+  transition:transform .15s;box-shadow:0 4px 20px rgba(224,48,80,.2);
+}
+#spawn-btn:active{transform:scale(.88)}
+
+/* === BOTTOM NAV === */
+#bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:500;
+  display:flex;background:rgba(7,7,15,.97);border-top:1px solid var(--border);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.nav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 0;
+  background:none;border:none;color:var(--text-dim);font-family:var(--ff-ui);cursor:pointer;transition:all .2s;
+}
+.nav-btn.active{color:var(--gold)}
+.nav-btn:active{transform:scale(.88)}
+.nav-btn .ni{font-size:20px}
+.nav-btn .nl{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;margin-top:2px}
+
+/* === MARKERS === */
+.monster-pin{
+  width:48px;height:48px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:28px;
+  background:radial-gradient(circle,rgba(224,48,80,.25),rgba(7,7,15,.9));
+  border:2px solid rgba(224,48,80,.45);cursor:pointer;position:relative;
+  animation:mpulse 2.2s infinite;
+}
+.monster-pin .mname{
+  position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);
+  white-space:nowrap;font-size:9px;font-weight:700;color:var(--red);
+  background:rgba(7,7,15,.85);padding:1px 5px;border-radius:3px;pointer-events:none;
+}
+@keyframes mpulse{0%,100%{box-shadow:0 0 8px rgba(224,48,80,.4)}50%{box-shadow:0 0 22px rgba(224,48,80,.8),0 0 44px rgba(224,48,80,.2)}}
+.player-pin{
+  width:40px;height:40px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:22px;
+  background:radial-gradient(circle,rgba(58,128,255,.35),rgba(7,7,15,.9));
+  border:2px solid var(--blue);animation:ppulse 2s infinite;
+}
+@keyframes ppulse{0%,100%{box-shadow:0 0 10px rgba(58,128,255,.6)}50%{box-shadow:0 0 28px rgba(58,128,255,.9),0 0 55px rgba(58,128,255,.25)}}
+
+/* === OVERLAYS === */
+.overlay{
+  position:fixed;inset:0;z-index:800;
+  display:flex;flex-direction:column;
+  opacity:0;pointer-events:none;transition:opacity .3s;
+}
+.overlay.vis{opacity:1;pointer-events:all}
+
+/* === BATTLE === */
+#battle-screen{background:radial-gradient(ellipse at top,#120520,#07070f 55%)}
+#battle-inner{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:max(18px,env(safe-area-inset-top)) 16px 16px;gap:10px}
+#battle-header{text-align:center;font-family:var(--ff-title);font-size:11px;color:var(--text-dim);letter-spacing:2px}
+
+.bcard{border-radius:18px;padding:14px 16px}
+#mcard{background:rgba(224,48,80,.06);border:1px solid rgba(224,48,80,.2);text-align:center}
+#moji{font-size:68px;display:block;margin-bottom:6px;filter:drop-shadow(0 0 18px rgba(224,48,80,.55));transition:transform .1s}
+#moji.shake{animation:bshake .4s}
+@keyframes bshake{0%{transform:translateX(0)}20%{transform:translateX(-9px) rotate(-3deg)}40%{transform:translateX(9px) rotate(3deg)}60%{transform:translateX(-6px) rotate(-2deg)}80%{transform:translateX(6px) rotate(2deg)}100%{transform:translateX(0)}}
+#mname{font-family:var(--ff-body);font-size:17px;color:var(--red);margin-bottom:2px}
+#mzone{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+
+.bhp-track{height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin-bottom:4px;border:1px solid var(--border)}
+.bhp-fill{height:100%;border-radius:4px;transition:width .4s ease}
+#mhp-fill{background:linear-gradient(90deg,var(--red),#ff7080)}
+#php-fill{background:linear-gradient(90deg,#1a7030,var(--green))}
+.hptxt{font-size:11px;font-weight:700;color:var(--text-dim)}
+
+#vsline{text-align:center;font-family:var(--ff-title);font-size:17px;color:var(--gold);text-shadow:0 0 14px rgba(240,192,64,.7);flex-shrink:0}
+
+#pcard{background:rgba(58,128,255,.05);border:1px solid rgba(58,128,255,.2)}
+#pcard-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+#pcard-icon{font-size:32px}
+#pname-b{font-family:var(--ff-body);font-size:15px;color:var(--blue);margin-bottom:2px}
+#pstats-b{font-size:11px;color:var(--text-dim)}
+
+#battle-log{
+  background:rgba(0,0,0,.45);border:1px solid var(--border);border-radius:12px;
+  padding:10px 14px;font-size:13px;color:var(--text);line-height:1.55;min-height:50px;
+}
+
+#battle-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto}
+.bbtn{
+  padding:15px 10px;border:none;border-radius:14px;
+  font-family:var(--ff-ui);font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;transition:all .15s;
+}
+.bbtn:active{transform:scale(.93)}
+.bbtn:disabled{opacity:.4;pointer-events:none}
+#batk{background:linear-gradient(135deg,#7a1520,#b81e2c);color:#fff;border:1px solid rgba(255,100,120,.25);box-shadow:0 4px 22px rgba(184,30,44,.45);grid-column:1/-1}
+#bskill{background:linear-gradient(135deg,#1a1050,#3a1890);color:var(--purple);border:1px solid rgba(144,96,224,.3)}
+#bflee{background:rgba(255,255,255,.04);color:var(--text-dim);border:1px solid var(--border)}
+
+/* === DAMAGE FLOATS === */
+.dmgf{
+  position:fixed;font-family:var(--ff-title);font-size:30px;font-weight:900;
+  pointer-events:none;z-index:9999;animation:dfloat 1.3s ease-out forwards;
+}
+.dmgf.pdmg{color:var(--green);text-shadow:0 0 12px var(--green)}
+.dmgf.mdmg{color:var(--red);text-shadow:0 0 12px var(--red)}
+.dmgf.crit{font-size:40px}
+@keyframes dfloat{0%{opacity:1;transform:translateY(0) scale(1)}50%{opacity:1;transform:translateY(-55px) scale(1.25)}100%{opacity:0;transform:translateY(-95px) scale(.7)}}
+
+/* === BACKDROP & SHEETS === */
+#backdrop{
+  position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.55);
+  opacity:0;pointer-events:none;transition:opacity .3s;
+}
+#backdrop.vis{opacity:1;pointer-events:all}
+
+.bsheet{
+  position:fixed;bottom:0;left:0;right:0;z-index:700;
+  background:var(--surface);border-top:1px solid var(--border);border-radius:22px 22px 0 0;
+  transform:translateY(100%);transition:transform .32s cubic-bezier(.4,0,.2,1);
+  max-height:82vh;display:flex;flex-direction:column;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.bsheet.open{transform:translateY(0)}
+.shdrag{width:38px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 0}
+.shtitle{font-family:var(--ff-body);font-size:15px;color:var(--gold);text-align:center;padding:10px;border-bottom:1px solid var(--border)}
+.shtabs{display:flex;padding:0 12px;border-bottom:1px solid var(--border)}
+.shtab{flex:1;padding:10px;text-align:center;font-size:11px;font-weight:700;color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;letter-spacing:.6px;transition:all .2s}
+.shtab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.shbody{overflow-y:auto;flex:1;padding:12px}
+
+/* === SHOP/INV ITEMS === */
+.sitem{
+  display:flex;align-items:center;gap:12px;
+  padding:12px;background:var(--card);border:1px solid var(--border);border-radius:13px;margin-bottom:8px;
+}
+.sitem.eq{border-color:var(--gold);background:rgba(240,192,64,.04)}
+.sitem .se{font-size:30px}
+.sitem .si{flex:1}
+.sitem .sn{font-family:var(--ff-body);font-size:13px;margin-bottom:2px}
+.sitem .sd{font-size:11px;color:var(--text-dim);margin-bottom:3px}
+.sitem .ss{font-size:12px;color:var(--green);font-weight:700}
+.sbuy{
+  background:linear-gradient(135deg,var(--gold-dim),#a07800);color:var(--gold);
+  border:none;border-radius:9px;padding:8px 12px;font-family:var(--ff-ui);font-size:11px;font-weight:700;
+  cursor:pointer;white-space:nowrap;transition:all .15s;
+}
+.sbuy:active{transform:scale(.93)}
+.sbuy:disabled{opacity:.4;pointer-events:none}
+.sbuy.eon{background:rgba(240,192,64,.08);color:var(--gold);cursor:default}
+.sbuy.eav{background:linear-gradient(135deg,#0a3020,#104030);color:var(--green);border:1px solid rgba(40,212,96,.2)}
+
+/* === STATS === */
+.strow{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(37,37,64,.5)}
+.stl{font-size:13px;color:var(--text-dim)}
+.stv{font-size:14px;font-weight:700;color:var(--text)}
+.eqsec{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:12px;margin-bottom:12px}
+.eqtitle{font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.eqrow{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}
+.eqlabel{color:var(--text-dim);width:58px}
+#xp-track{height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin:3px 0 8px;border:1px solid var(--border)}
+#xp-fill{height:100%;background:linear-gradient(90deg,var(--purple),#c080ff);border-radius:3px;transition:width .5s}
+.heal-btn{
+  width:100%;margin-top:14px;padding:14px;
+  background:linear-gradient(135deg,#0a2818,#0e3820);border:1px solid rgba(40,212,96,.25);border-radius:13px;
+  color:var(--green);font-family:var(--ff-ui);font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;
+}
+.heal-btn:active{transform:scale(.97)}
+
+/* === LOOT MODAL === */
+#loot-modal{
+  position:fixed;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.75);opacity:0;pointer-events:none;transition:opacity .3s;
+}
+#loot-modal.vis{opacity:1;pointer-events:all}
+#loot-box{
+  background:var(--surface);border:1px solid var(--gold);border-radius:22px;padding:28px 22px;
+  text-align:center;width:min(340px,90vw);box-shadow:0 0 50px rgba(240,192,64,.18);
+}
+#loot-title{font-family:var(--ff-title);font-size:20px;color:var(--gold);margin-bottom:4px}
+#loot-moji{font-size:54px;margin-bottom:6px;display:block}
+#loot-sub{font-size:12px;color:var(--text-dim);margin-bottom:12px}
+#loot-lines{text-align:left;margin-bottom:18px}
+.lline{display:flex;align-items:center;gap:8px;padding:6px;font-size:14px;animation:lap .35s ease-out backwards}
+@keyframes lap{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+#loot-ok{
+  background:linear-gradient(135deg,var(--gold-dim),#a07800);color:var(--gold);
+  border:none;border-radius:13px;padding:14px 36px;font-family:var(--ff-ui);font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:all .15s;
+}
+#loot-ok:active{transform:scale(.95)}
+
+/* === TOAST === */
+#toast{
+  position:fixed;top:max(90px,env(safe-area-inset-top)+80px);left:50%;transform:translateX(-50%);
+  background:var(--card);border:1px solid var(--border);border-radius:99px;padding:9px 20px;
+  font-size:13px;font-weight:600;color:var(--text);z-index:1000;
+  opacity:0;pointer-events:none;transition:opacity .3s;white-space:nowrap;max-width:90vw;
+}
+#toast.vis{opacity:1}
+
+/* === TRANSITION === */
+#trans{position:fixed;inset:0;z-index:850;background:#000;opacity:0;pointer-events:none;transition:opacity .28s}
+
+/* scrollbar */
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- TOP HUD -->
+<div id="top-hud">
+  <div id="hud-row1">
+    <div id="hud-title">⚔️ MapRaiders</div>
+    <div class="hud-chip lvl">⭐ Lv<span id="hud-lv">1</span></div>
+    <div class="hud-chip gold">💰<span id="hud-g">50</span></div>
+  </div>
+  <div id="hud-hp-row">
+    <span id="hud-hp-label">❤️ <span id="hud-hp">100</span>/<span id="hud-mhp">100</span></span>
+    <div id="hud-hp-track"><div id="hud-hp-fill" style="width:100%"></div></div>
+  </div>
+</div>
+
+<!-- BIOME -->
+<div id="biome-badge">📍 Detecting zone...</div>
+
+<!-- MAP CONTROLS -->
+<div id="locate-btn" onclick="centerMap()">🎯</div>
+<div id="spawn-btn" onclick="manualSpawn()" title="Respawn monsters">👹</div>
+
+<!-- BOTTOM NAV -->
+<div id="bottom-nav">
+  <button class="nav-btn active" onclick="navTo('map',this)"><span class="ni">🗺️</span><span class="nl">Map</span></button>
+  <button class="nav-btn" onclick="navTo('shop',this)"><span class="ni">🏪</span><span class="nl">Shop</span></button>
+  <button class="nav-btn" onclick="navTo('inv',this)"><span class="ni">🎒</span><span class="nl">Gear</span></button>
+  <button class="nav-btn" onclick="navTo('stats',this)"><span class="ni">📊</span><span class="nl">Stats</span></button>
+</div>
+
+<!-- BATTLE OVERLAY -->
+<div class="overlay" id="battle-screen">
+  <div id="battle-inner">
+    <div id="battle-header">⚔️ &nbsp; C O M B A T &nbsp; ⚔️</div>
+    <!-- Monster card -->
+    <div class="bcard" id="mcard">
+      <span id="moji">👹</span>
+      <div id="mname">Forest Troll</div>
+      <div id="mzone">Dark Forest</div>
+      <div class="bhp-track"><div class="bhp-fill" id="mhp-fill" style="width:100%"></div></div>
+      <div class="hptxt">❤️ <span id="mhp">50</span>/<span id="mmhp">50</span></div>
+    </div>
+    <!-- VS -->
+    <div id="vsline">— VS —</div>
+    <!-- Player card -->
+    <div class="bcard" id="pcard">
+      <div id="pcard-top">
+        <span id="pcard-icon">🧙</span>
+        <div>
+          <div id="pname-b">Hunter</div>
+          <div id="pstats-b">⚔️ ATK: <span id="batk-v">10</span> &nbsp;🛡️ DEF: <span id="bdef-v">5</span></div>
+        </div>
+      </div>
+      <div class="bhp-track"><div class="bhp-fill" id="php-fill" style="width:100%"></div></div>
+      <div class="hptxt">❤️ <span id="php">100</span>/<span id="pmhp">100</span></div>
+    </div>
+    <!-- Log -->
+    <div id="battle-log">Prepare for battle...</div>
+    <!-- Buttons -->
+    <div id="battle-btns">
+      <button class="bbtn" id="batk" onclick="doAttack()">⚔️ ATTACK</button>
+      <button class="bbtn" id="bskill" onclick="doSkill()">✨ SKILL</button>
+      <button class="bbtn" id="bflee" onclick="doFlee()">🏃 FLEE</button>
+    </div>
+  </div>
+</div>
+
+<!-- BACKDROP -->
+<div id="backdrop" onclick="closeSheets()"></div>
+
+<!-- SHOP SHEET -->
+<div class="bsheet" id="shop-sheet">
+  <div class="shdrag"></div>
+  <div class="shtitle">⚔️ The Armory</div>
+  <div class="shtabs" id="shop-tabs">
+    <div class="shtab active" onclick="shopTab(this,'weapons')">Weapons</div>
+    <div class="shtab" onclick="shopTab(this,'armor')">Armor</div>
+    <div class="shtab" onclick="shopTab(this,'shields')">Shields</div>
+  </div>
+  <div class="shbody" id="shop-body"></div>
+</div>
+
+<!-- INV SHEET -->
+<div class="bsheet" id="inv-sheet">
+  <div class="shdrag"></div>
+  <div class="shtitle">🎒 Your Gear</div>
+  <div class="shbody" id="inv-body"></div>
+</div>
+
+<!-- STATS SHEET -->
+<div class="bsheet" id="stats-sheet">
+  <div class="shdrag"></div>
+  <div class="shtitle">📊 Character</div>
+  <div class="shbody" id="stats-body"></div>
+</div>
+
+<!-- LOOT MODAL -->
+<div id="loot-modal">
+  <div id="loot-box">
+    <div id="loot-title">⚔️ VICTORY!</div>
+    <span id="loot-moji">👹</span>
+    <div id="loot-sub"></div>
+    <div id="loot-lines"></div>
+    <button id="loot-ok" onclick="closeLoot()">Continue →</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- TRANSITION -->
+<div id="trans"></div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+const BIOMES = {
+  urban:{name:'Urban Wasteland',icon:'🏙️',monsters:[
+    {name:'Cyber Rat',e:'🐀',hp:22,atk:6,def:1,xp:10,g:[3,9],loot:.18},
+    {name:'Iron Bandit',e:'🗡️',hp:48,atk:12,def:3,xp:28,g:[8,22],loot:.32},
+    {name:'Neon Wraith',e:'👻',hp:40,atk:14,def:2,xp:34,g:[10,26],loot:.28},
+    {name:'Steel Golem',e:'🤖',hp:90,atk:20,def:9,xp:68,g:[26,52],loot:.48},
+    {name:'Shadow Drone',e:'🔮',hp:120,atk:26,def:12,xp:100,g:[45,80],loot:.55},
+  ]},
+  forest:{name:'Dark Forest',icon:'🌲',monsters:[
+    {name:'Goblin Scout',e:'👺',hp:26,atk:8,def:1,xp:14,g:[4,11],loot:.28},
+    {name:'Shadow Wolf',e:'🐺',hp:34,atk:10,def:2,xp:20,g:[5,14],loot:.24},
+    {name:'Bark Demon',e:'🌿',hp:62,atk:16,def:6,xp:44,g:[16,36],loot:.38},
+    {name:'Forest Troll',e:'👹',hp:80,atk:19,def:7,xp:58,g:[22,44],loot:.44},
+    {name:'Ancient Treant',e:'🌳',hp:130,atk:28,def:14,xp:110,g:[50,90],loot:.58},
+  ]},
+  water:{name:'Abyssal Waters',icon:'🌊',monsters:[
+    {name:'Tide Wraith',e:'💧',hp:30,atk:9,def:2,xp:16,g:[4,13],loot:.22},
+    {name:'Coral Zombie',e:'🧟',hp:52,atk:13,def:4,xp:34,g:[10,24],loot:.34},
+    {name:'Sea Serpent',e:'🐍',hp:72,atk:20,def:6,xp:60,g:[24,48],loot:.44},
+    {name:'Kraken Spawn',e:'🐙',hp:100,atk:25,def:10,xp:84,g:[32,64],loot:.54},
+    {name:'Leviathan',e:'🌀',hp:150,atk:34,def:16,xp:120,g:[60,100],loot:.65},
+  ]},
+  mountain:{name:'Cursed Peaks',icon:'⛰️',monsters:[
+    {name:'Cave Bat',e:'🦇',hp:24,atk:7,def:1,xp:12,g:[3,10],loot:.20},
+    {name:'Rock Drake',e:'🦎',hp:56,atk:16,def:7,xp:42,g:[16,32],loot:.38},
+    {name:'Cave Troll',e:'👾',hp:82,atk:22,def:10,xp:70,g:[30,58],loot:.48},
+    {name:'Stone Giant',e:'🏔️',hp:110,atk:28,def:14,xp:98,g:[42,82],loot:.58},
+    {name:'Mountain Dragon',e:'🐉',hp:160,atk:38,def:20,xp:140,g:[70,120],loot:.70},
+  ]},
+  default:{name:'Wild Lands',icon:'🌍',monsters:[
+    {name:'Slime',e:'🟢',hp:16,atk:4,def:0,xp:8,g:[2,7],loot:.14},
+    {name:'Feral Rat',e:'🐭',hp:20,atk:5,def:1,xp:10,g:[2,8],loot:.18},
+    {name:'Dark Sprite',e:'✨',hp:22,atk:7,def:1,xp:13,g:[3,9],loot:.22},
+    {name:'Shadow Imp',e:'😈',hp:40,atk:11,def:2,xp:26,g:[7,17],loot:.28},
+    {name:'Void Shade',e:'🌑',hp:70,atk:18,def:6,xp:55,g:[20,42],loot:.40},
+  ]},
+};
+
+const SHOP = {
+  weapons:[
+    {id:'fists',n:'Bare Fists',e:'👊',atk:0,price:0,d:'Your bare hands.'},
+    {id:'rusty_sword',n:'Rusty Sword',e:'🗡️',atk:6,price:15,d:'Better than nothing.'},
+    {id:'iron_blade',n:'Iron Blade',e:'⚔️',atk:14,price:70,d:'Reliable and sharp.'},
+    {id:'fire_staff',n:'Fire Staff',e:'🔥',atk:26,price:200,d:'Burns with fury.'},
+    {id:'thunder_axe',n:'Thunder Axe',e:'⚡',atk:42,price:450,d:'Strikes like lightning.'},
+    {id:'void_blade',n:'Void Blade',e:'🌑',atk:65,price:1000,d:'Tears reality itself.'},
+  ],
+  armor:[
+    {id:'none_armor',n:'No Armor',e:'👕',def:0,price:0,d:'No protection.'},
+    {id:'leather',n:'Leather Vest',e:'🧥',def:4,price:25,d:'Light protection.'},
+    {id:'chain',n:'Chain Mail',e:'🔗',def:10,price:100,d:'Solid linked steel.'},
+    {id:'plate',n:'Plate Armor',e:'🏰',def:20,price:300,d:'Heavy but formidable.'},
+    {id:'dragon_scale',n:'Dragon Scale',e:'🐉',def:36,price:720,d:'Forged from dragon hide.'},
+  ],
+  shields:[
+    {id:'none_shield',n:'No Shield',e:'❌',shp:0,price:0,d:'No bonus HP.'},
+    {id:'wooden',n:'Wooden Shield',e:'🪵',shp:22,price:20,d:'Barely holds together.'},
+    {id:'iron_shield',n:'Iron Shield',e:'🛡️',shp:50,price:80,d:'Reliable iron barrier.'},
+    {id:'crystal',n:'Crystal Shield',e:'💎',shp:100,price:250,d:'Magical reinforcement.'},
+    {id:'void_aegis',n:'Void Aegis',e:'🌀',shp:180,price:800,d:'Absorbs dark energy.'},
+  ],
+};
+
+function xpNeeded(lvl){ return Math.floor(60*Math.pow(lvl,1.45)); }
+
+// ============================================================
+// STATE
+// ============================================================
+let G = {
+  player:{name:'Hunter',hp:100,maxHp:100,baseAtk:8,baseDef:2,gold:50,level:1,xp:0,skillCd:0},
+  eq:{weapon:SHOP.weapons[0],armor:SHOP.armor[0],shield:SHOP.shields[0]},
+  owned:{weapons:['fists'],armor:['none_armor'],shields:['none_shield']},
+  biome:'default',pos:null,kills:0,
+};
+
+function load(){
+  try{
+    const s=JSON.parse(localStorage.getItem('mr3_state')||'null');
+    if(!s)return;
+    G.player={...G.player,...s.p};
+    G.owned={...G.owned,...s.o};
+    G.kills=s.k||0;
+    if(s.eq){
+      const w=SHOP.weapons.find(x=>x.id===s.eq.w);
+      const a=SHOP.armor.find(x=>x.id===s.eq.a);
+      const sh=SHOP.shields.find(x=>x.id===s.eq.s);
+      if(w)G.eq.weapon=w; if(a)G.eq.armor=a; if(sh)G.eq.shield=sh;
+    }
+  }catch(e){}
+}
+function save(){
+  localStorage.setItem('mr3_state',JSON.stringify({
+    p:G.player,o:G.owned,k:G.kills,
+    eq:{w:G.eq.weapon.id,a:G.eq.armor.id,s:G.eq.shield.id}
+  }));
+}
+
+// ============================================================
+// COMPUTED STATS
+// ============================================================
+function getAtk(){ return G.player.baseAtk+(G.eq.weapon?.atk||0); }
+function getDef(){ return G.player.baseDef+(G.eq.armor?.def||0); }
+function getMaxHp(){ return 100+(G.player.level-1)*12+(G.eq.shield?.shp||0); }
+
+// ============================================================
+// HUD
+// ============================================================
+function updateHUD(){
+  const mhp=getMaxHp();
+  G.player.hp=Math.min(G.player.hp,mhp);
+  G.player.maxHp=mhp;
+  $('hud-lv').textContent=G.player.level;
+  $('hud-g').textContent=G.player.gold;
+  $('hud-hp').textContent=G.player.hp;
+  $('hud-mhp').textContent=mhp;
+  $('hud-hp-fill').style.width=Math.max(0,(G.player.hp/mhp)*100)+'%';
+}
+function $(id){return document.getElementById(id);}
+
+// ============================================================
+// MAP
+// ============================================================
+let map,playerMk;
+const mMonsters=[];
+let battleActive=false;
+let lastBiomePt=null;
+
+function initMap(lat,lng){
+  map=L.map('map',{center:[lat,lng],zoom:16,zoomControl:false,attributionControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+  setPlayerMk(lat,lng);
+  G.pos=[lat,lng];
+  detectBiome(lat,lng);
+  spawnMonsters(lat,lng);
+}
+
+function setPlayerMk(lat,lng){
+  const icon=L.divIcon({html:'<div class="player-pin">🧙</div>',className:'',iconSize:[40,40],iconAnchor:[20,20]});
+  if(playerMk) playerMk.setLatLng([lat,lng]);
+  else playerMk=L.marker([lat,lng],{icon,zIndexOffset:999}).addTo(map);
+}
+
+function centerMap(){
+  if(G.pos) map.setView(G.pos,16,{animate:true});
+}
+
+function manualSpawn(){
+  if(!G.pos||battleActive)return;
+  clearMonsters();
+  spawnMonsters(G.pos[0],G.pos[1]);
+  toast('👹 New monsters spawned!');
+}
+
+function clearMonsters(){
+  mMonsters.forEach(m=>m.mk.remove());
+  mMonsters.length=0;
+}
+
+function spawnMonsters(lat,lng){
+  const biome=BIOMES[G.biome]||BIOMES.default;
+  const count=5+Math.floor(Math.random()*5);
+  for(let i=0;i<count;i++){
+    const ang=Math.random()*Math.PI*2;
+    const d=.0008+Math.random()*.0028;
+    const mlat=lat+Math.cos(ang)*d;
+    const mlng=lng+Math.sin(ang)*d*1.35;
+    // Scale difficulty with player level
+    const pool=biome.monsters;
+    const maxIdx=Math.min(pool.length-1,Math.floor(G.player.level/2)+Math.floor(Math.random()*2));
+    const tmpl=pool[Math.floor(Math.random()*(maxIdx+1))];
+    const lv=0.85+G.player.level*.14;
+    const m={
+      ...tmpl,
+      hp:Math.floor(tmpl.hp*lv),maxHp:Math.floor(tmpl.hp*lv),
+      atk:Math.floor(tmpl.atk*lv),def:Math.floor(tmpl.def*lv),
+      xp:Math.floor(tmpl.xp*lv),g:tmpl.g.map(v=>Math.floor(v*lv)),
+    };
+    const icon=L.divIcon({
+      html:`<div class="monster-pin">${m.e}<span class="mname">${m.name}</span></div>`,
+      className:'',iconSize:[48,68],iconAnchor:[24,24]
+    });
+    const mk=L.marker([mlat,mlng],{icon}).addTo(map);
+    const obj={mk,m,lat:mlat,lng:mlng};
+    mMonsters.push(obj);
+    mk.on('click',()=>startBattle(obj));
+  }
+}
+
+setInterval(()=>{if(G.pos&&!battleActive){clearMonsters();spawnMonsters(G.pos[0],G.pos[1]);}},6*60*1000);
+
+async function detectBiome(lat,lng){
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`,
+      {headers:{'Accept-Language':'en','User-Agent':'MapRaiders/1.0'}});
+    const d=await r.json();
+    const cls=(d.class||'').toLowerCase();
+    const typ=(d.type||'').toLowerCase();
+    const dn=(d.display_name||'').toLowerCase();
+    let b='default';
+    if(['waterway','water','bay','coastline','beach','reservoir','river','lake'].some(k=>cls.includes(k)||typ.includes(k)||dn.includes(k)))b='water';
+    else if(['park','forest','wood','nature_reserve','garden','heath','scrub','grassland','meadow'].some(k=>cls.includes(k)||typ.includes(k)||dn.includes(k)))b='forest';
+    else if(['peak','mountain','hill','cliff','ridge','mount'].some(k=>typ.includes(k)||dn.includes(k)))b='mountain';
+    else if(['residential','commercial','retail','industrial','building','amenity','road','highway'].some(k=>cls.includes(k)||typ.includes(k)))b='urban';
+    G.biome=b;
+    const bi=BIOMES[b];
+    $('biome-badge').textContent=`${bi.icon} ${bi.name}`;
+    clearMonsters();
+    spawnMonsters(lat,lng);
+  }catch(e){
+    G.biome='default';
+    $('biome-badge').textContent='🌍 Wild Lands';
+  }
+}
+
+// ============================================================
+// GEOLOCATION
+// ============================================================
+function initGeo(){
+  if(!navigator.geolocation){initMap(40.7128,-74.006);toast('📍 No GPS – using demo location');return;}
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const{latitude:la,longitude:lo}=pos.coords;
+      initMap(la,lo);
+      navigator.geolocation.watchPosition(p=>{
+        const{latitude:la2,longitude:lo2}=p.coords;
+        G.pos=[la2,lo2];
+        setPlayerMk(la2,lo2);
+        if(lastBiomePt){
+          const dx=la2-lastBiomePt[0],dy=lo2-lastBiomePt[1];
+          if(Math.sqrt(dx*dx+dy*dy)>.002){lastBiomePt=[la2,lo2];detectBiome(la2,lo2);}
+        }else lastBiomePt=[la2,lo2];
+      },null,{enableHighAccuracy:true,maximumAge:8000,timeout:30000});
+    },
+    ()=>{initMap(40.7128,-74.006);toast('📍 Enable location for real-world play!');},
+    {enableHighAccuracy:true,timeout:12000}
+  );
+}
+
+// ============================================================
+// BATTLE SYSTEM
+// ============================================================
+let B={m:null,mhp:0,mmhp:0,php:0,pmhp:0,obj:null,skillCd:0};
+
+function startBattle(obj){
+  if(battleActive)return;
+  if(G.player.hp<=0){toast('❤️ You need to rest first!');return;}
+  battleActive=true;
+  const m={...obj.m};
+  B.m=m; B.mhp=m.maxHp; B.mmhp=m.maxHp;
+  B.pmhp=getMaxHp(); B.php=G.player.hp;
+  B.obj=obj; B.skillCd=G.player.skillCd||0;
+
+  $('moji').textContent=m.e;
+  $('mname').textContent=m.name;
+  $('mzone').textContent=(BIOMES[G.biome]?.name)||'Wild Lands';
+  setBhp('m',B.mhp,B.mmhp); setBhp('p',B.php,B.pmhp);
+  $('batk-v').textContent=getAtk(); $('bdef-v').textContent=getDef();
+  updateSkillBtn();
+  setLog(`A wild ${m.name} ${m.e} appears!`);
+  setBtns(true);
+
+  // transition flash
+  const t=$('trans');
+  t.style.opacity=1;t.style.pointerEvents='all';
+  setTimeout(()=>{
+    $('battle-screen').classList.add('vis');
+    t.style.opacity=0;t.style.pointerEvents='none';
+  },280);
+}
+
+function setBhp(who,cur,max){
+  const pct=Math.max(0,(cur/max)*100);
+  $(who+'hp').textContent=cur;
+  $(who+'mhp').textContent=max;
+  $(who+'hp-fill').style.width=pct+'%';
+}
+
+function setLog(msg){$('battle-log').textContent=msg;}
+
+function setBtns(on){
+  ['batk','bskill','bflee'].forEach(id=>{$(id).disabled=!on});
+  if(on)updateSkillBtn();
+}
+
+function updateSkillBtn(){
+  const btn=$('bskill');
+  if(B.skillCd>0){btn.textContent=`⏳ (${B.skillCd})`;btn.disabled=true;}
+  else{btn.textContent='✨ SKILL';btn.disabled=false;}
+}
+
+function doAttack(){
+  if(!battleActive)return;
+  setBtns(false);
+  const crit=Math.random()<.15;
+  let dmg=Math.max(1,getAtk()-B.m.def+rnd(-2,5));
+  if(crit)dmg=Math.floor(dmg*1.85);
+  applyMonsterDmg(dmg,crit);
+  setLog(crit?`💥 Critical! You dealt ${dmg} damage!`:`You attacked for ${dmg} damage.`);
+  if(B.mhp<=0){setTimeout(()=>endBattle(true),650);return;}
+  setTimeout(monsterAttack,820);
+}
+
+function doSkill(){
+  if(!battleActive||B.skillCd>0)return;
+  setBtns(false);
+  B.skillCd=3;
+  const dmg=Math.floor(getAtk()*2.4+6);
+  applyMonsterDmg(dmg,true);
+  setLog(`✨ Skill Strike! You unleashed ${dmg} damage! (Cooldown: 3)`);
+  updateSkillBtn();
+  if(B.mhp<=0){setTimeout(()=>endBattle(true),650);return;}
+  setTimeout(monsterAttack,820);
+}
+
+function applyMonsterDmg(dmg,crit){
+  $('moji').classList.remove('shake');
+  void $('moji').offsetWidth;
+  $('moji').classList.add('shake');
+  setTimeout(()=>$('moji').classList.remove('shake'),420);
+  B.mhp=Math.max(0,B.mhp-dmg);
+  setBhp('m',B.mhp,B.mmhp);
+  floatDmg(dmg,true,crit);
+}
+
+function monsterAttack(){
+  const crit=Math.random()<.1;
+  let dmg=Math.max(1,B.m.atk-getDef()+rnd(-1,4));
+  if(crit)dmg=Math.floor(dmg*1.65);
+  B.php=Math.max(0,B.php-dmg);
+  G.player.hp=B.php;
+  setBhp('p',B.php,B.pmhp);
+  updateHUD();
+  if(B.skillCd>0)B.skillCd--;
+  const log=crit?`💥 ${B.m.name} crit for ${dmg}!`:`${B.m.name} attacked for ${dmg}.`;
+  floatDmg(dmg,false,crit);
+  if(B.php<=0){setLog(log+'\n☠️ You were defeated...');setTimeout(()=>endBattle(false),1100);return;}
+  setLog(log);
+  setBtns(true);
+}
+
+function doFlee(){
+  if(Math.random()<.55){
+    battleActive=false; toast('🏃 Escaped!');
+    $('battle-screen').classList.remove('vis');
+    G.player.skillCd=B.skillCd; save();
+  }else{
+    setBtns(false);
+    setLog(`${B.m.name} blocked your escape!`);
+    setTimeout(monsterAttack,700);
+  }
+}
+
+function endBattle(won){
+  setBtns(false);
+  G.player.skillCd=B.skillCd;
+  if(won){
+    if(B.obj){B.obj.mk.remove();const i=mMonsters.indexOf(B.obj);if(i>-1)mMonsters.splice(i,1);}
+    const gold=B.m.g[0]+Math.floor(Math.random()*(B.m.g[1]-B.m.g[0]));
+    const xp=B.m.xp;
+    G.player.gold+=gold; G.player.xp+=xp; G.kills++;
+    let lvUp=false;
+    while(G.player.xp>=xpNeeded(G.player.level)){
+      G.player.xp-=xpNeeded(G.player.level);
+      G.player.level++; G.player.baseAtk+=2; G.player.baseDef+=1;
+      G.player.hp=getMaxHp(); lvUp=true;
+    }
+    // Loot drop
+    let loot=null;
+    if(Math.random()<B.m.loot){
+      const types=['weapons','armor','shields'];
+      const typ=types[Math.floor(Math.random()*3)];
+      const opts=SHOP[typ].filter(x=>!G.owned[typ].includes(x.id)&&x.price>0);
+      if(opts.length){
+        const item=opts[Math.floor(Math.random()*Math.min(3,opts.length))];
+        G.owned[typ].push(item.id);
+        loot={typ,item};
+      }
+    }
+    save(); updateHUD();
+    setTimeout(()=>{
+      $('battle-screen').classList.remove('vis');
+      battleActive=false;
+      showLoot(gold,xp,loot,lvUp);
+    },600);
+  }else{
+    G.player.hp=Math.floor(getMaxHp()*.3);
+    G.player.gold=Math.max(0,G.player.gold-Math.floor(G.player.gold*.1));
+    save();
+    setTimeout(()=>{
+      $('battle-screen').classList.remove('vis');
+      battleActive=false; updateHUD();
+      toast('💀 Defeated! Lost 10% gold. You were revived at 30% HP.');
+    },1000);
+  }
+}
+
+function floatDmg(dmg,player,crit){
+  const el=document.createElement('div');
+  el.className=`dmgf ${player?'pdmg':'mdmg'} ${crit?'crit':''}`;
+  el.textContent=(crit?'💥':'')+'-'+dmg;
+  const card=$(player?'mcard':'pcard');
+  const r=card.getBoundingClientRect();
+  el.style.left=(r.left+r.width*.35+Math.random()*60)+'px';
+  el.style.top=(r.top+30)+'px';
+  document.body.appendChild(el);
+  el.addEventListener('animationend',()=>el.remove());
+}
+
+function rnd(a,b){return a+Math.floor(Math.random()*(b-a+1));}
+
+// ============================================================
+// LOOT MODAL
+// ============================================================
+function showLoot(gold,xp,loot,lvUp){
+  $('loot-moji').textContent=B.m.e;
+  $('loot-title').textContent=lvUp?'🌟 LEVEL UP!':'⚔️ VICTORY!';
+  $('loot-sub').textContent=`Level ${G.player.level} • ${G.kills} monsters slain`;
+  const lines=$('loot-lines');
+  lines.innerHTML='';
+  const add=(e,t,c,d)=>{
+    const el=document.createElement('div');
+    el.className='lline';
+    el.style.cssText=`color:${c};animation-delay:${d}s`;
+    el.innerHTML=`<span>${e}</span><span>${t}</span>`;
+    lines.appendChild(el);
+  };
+  add('💰',`+${gold} Gold`,'var(--gold)',.0);
+  add('⭐',`+${xp} Experience`,'var(--purple)',.08);
+  if(lvUp) add('🌟',`Level Up → ${G.player.level}! Full HP restored.`,'var(--green)',.16);
+  if(loot) add(loot.item.e,`Found: ${loot.item.n}!`,'var(--blue)',lvUp?.24:.16);
+  $('loot-modal').classList.add('vis');
+}
+function closeLoot(){$('loot-modal').classList.remove('vis');updateHUD();}
+
+// ============================================================
+// SHOP
+// ============================================================
+let curShopTab='weapons';
+function shopTab(el,tab){
+  curShopTab=tab;
+  document.querySelectorAll('#shop-tabs .shtab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderShop();
+}
+function renderShop(){
+  const items=SHOP[curShopTab];
+  const ek=curShopTab==='weapons'?'weapon':curShopTab==='armor'?'armor':'shield';
+  const ok=curShopTab==='weapons'?'weapons':curShopTab==='armor'?'armor':'shields';
+  const eqId=G.eq[ek]?.id;
+  const owned=G.owned[ok];
+  const el=$('shop-body'); el.innerHTML='';
+  items.filter(i=>i.price>0).forEach(item=>{
+    const isOwned=owned.includes(item.id);
+    const isEq=item.id===eqId;
+    const stat=curShopTab==='weapons'?`⚔️ +${item.atk} ATK`:curShopTab==='armor'?`🛡️ +${item.def} DEF`:`❤️ +${item.shp} HP`;
+    const div=document.createElement('div');
+    div.className='sitem'+(isEq?' eq':'');
+    const btnClass=isEq?'sbuy eon':isOwned?'sbuy eav':'sbuy';
+    const btnTxt=isEq?'Equipped':isOwned?'Equip':`💰 ${item.price}g`;
+    div.innerHTML=`
+      <span class="se">${item.e}</span>
+      <div class="si">
+        <div class="sn">${item.n}${isEq?' ✓':''}</div>
+        <div class="sd">${item.d}</div>
+        <div class="ss">${stat}</div>
+      </div>
+      <button class="${btnClass}" onclick="buyEquip('${curShopTab}','${item.id}')">${btnTxt}</button>`;
+    el.appendChild(div);
+  });
+}
+function buyEquip(tab,id){
+  const items=SHOP[tab];
+  const item=items.find(x=>x.id===id); if(!item)return;
+  const ok=tab==='weapons'?'weapons':tab==='armor'?'armor':'shields';
+  const ek=tab==='weapons'?'weapon':tab==='armor'?'armor':'shield';
+  const isOwned=G.owned[ok].includes(id);
+  if(!isOwned){
+    if(G.player.gold<item.price){toast('💰 Not enough gold!');return;}
+    G.player.gold-=item.price; G.owned[ok].push(id);
+    toast(`✅ Bought ${item.n}!`);
+  }
+  G.eq[ek]=item;
+  const newMhp=getMaxHp();
+  if(G.player.hp>newMhp)G.player.hp=newMhp;
+  save(); updateHUD(); renderShop();
+  if(isOwned)toast(`⚔️ ${item.n} equipped!`);
+}
+
+// ============================================================
+// INVENTORY
+// ============================================================
+function renderInv(){
+  const el=$('inv-body'); el.innerHTML='';
+  const secs=[
+    {label:'WEAPONS',tab:'weapons',ek:'weapon'},
+    {label:'ARMOR',tab:'armor',ek:'armor'},
+    {label:'SHIELDS',tab:'shields',ek:'shield'},
+  ];
+  secs.forEach(sec=>{
+    const items=SHOP[sec.tab].filter(x=>G.owned[sec.tab].includes(x.id));
+    if(!items.length)return;
+    const h=document.createElement('div');
+    h.style.cssText='font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px';
+    h.textContent=sec.label; el.appendChild(h);
+    const eqId=G.eq[sec.ek]?.id;
+    items.forEach(item=>{
+      const isEq=item.id===eqId;
+      const stat=sec.tab==='weapons'?`⚔️ +${item.atk} ATK`:sec.tab==='armor'?`🛡️ +${item.def} DEF`:`❤️ +${item.shp} HP`;
+      const div=document.createElement('div');
+      div.className='sitem'+(isEq?' eq':'');
+      div.innerHTML=`
+        <span class="se">${item.e}</span>
+        <div class="si"><div class="sn">${item.n}${isEq?' ✓':''}</div><div class="ss">${stat}</div></div>
+        <button class="sbuy ${isEq?'eon':'eav'}" onclick="equipInv('${sec.tab}','${item.id}')">${isEq?'Equipped':'Equip'}</button>`;
+      el.appendChild(div);
+    });
+  });
+  if(!el.children.length){
+    el.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:40px;font-size:13px;">No gear yet.<br>Visit the shop or kill monsters!</div>';
+  }
+}
+function equipInv(tab,id){
+  const item=SHOP[tab].find(x=>x.id===id); if(!item)return;
+  const ek=tab==='weapons'?'weapon':tab==='armor'?'armor':'shield';
+  G.eq[ek]=item;
+  const nm=getMaxHp(); if(G.player.hp>nm)G.player.hp=nm;
+  save(); updateHUD(); renderInv(); toast(`⚔️ ${item.n} equipped!`);
+}
+
+// ============================================================
+// STATS
+// ============================================================
+function renderStats(){
+  const p=G.player;
+  const mhp=getMaxHp();
+  const xpn=xpNeeded(p.level);
+  const xpPct=Math.min(100,(p.xp/xpn)*100);
+  $('stats-body').innerHTML=`
+    <div style="text-align:center;padding:10px 0 14px">
+      <div style="font-size:58px;margin-bottom:4px">🧙</div>
+      <div style="font-family:var(--ff-body);font-size:18px;color:var(--gold)">${p.name}</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:3px">Level ${p.level} Adventurer</div>
+      <div style="margin-top:9px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:3px"><span>XP</span><span>${p.xp}/${xpn}</span></div>
+        <div id="xp-track"><div id="xp-fill" style="width:${xpPct}%"></div></div>
+      </div>
+    </div>
+    <div class="eqsec">
+      <div class="eqtitle">⚔️ Currently Equipped</div>
+      <div class="eqrow"><span class="eqlabel">Weapon</span><span>${G.eq.weapon.e} ${G.eq.weapon.n}</span></div>
+      <div class="eqrow"><span class="eqlabel">Armor</span><span>${G.eq.armor.e} ${G.eq.armor.n}</span></div>
+      <div class="eqrow"><span class="eqlabel">Shield</span><span>${G.eq.shield.e} ${G.eq.shield.n}</span></div>
+    </div>
+    <div class="strow"><span class="stl">❤️ HP</span><span class="stv">${p.hp} / ${mhp}</span></div>
+    <div class="strow"><span class="stl">⚔️ Total Attack</span><span class="stv">${getAtk()} (${p.baseAtk}+${getAtk()-p.baseAtk})</span></div>
+    <div class="strow"><span class="stl">🛡️ Total Defense</span><span class="stv">${getDef()} (${p.baseDef}+${getDef()-p.baseDef})</span></div>
+    <div class="strow"><span class="stl">💰 Gold</span><span class="stv">${p.gold}g</span></div>
+    <div class="strow"><span class="stl">☠️ Monsters Slain</span><span class="stv">${G.kills}</span></div>
+    <div class="strow"><span class="stl">🗺️ Current Zone</span><span class="stv">${BIOMES[G.biome]?.icon} ${BIOMES[G.biome]?.name}</span></div>
+    <button class="heal-btn" onclick="freeHeal()">❤️ Rest &amp; Recover (Free)</button>
+    <button class="heal-btn" style="margin-top:8px;background:linear-gradient(135deg,#2a0808,#3a0808);border-color:rgba(224,48,80,.2);color:var(--red)" onclick="resetGame()">🗑️ Reset Game</button>
+  `;
+}
+function freeHeal(){
+  const mhp=getMaxHp();
+  if(G.player.hp>=mhp){toast('❤️ Already at full HP!');return;}
+  G.player.hp=mhp; save(); updateHUD(); renderStats(); toast('❤️ Fully healed!');
+}
+function resetGame(){
+  if(!confirm('Reset all progress? This cannot be undone.'))return;
+  localStorage.removeItem('mr3_state'); location.reload();
+}
+
+// ============================================================
+// NAV & SHEETS
+// ============================================================
+function navTo(page,btn){
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  closeSheets();
+  if(page==='map')return;
+  $('backdrop').classList.add('vis');
+  if(page==='shop'){$('shop-sheet').classList.add('open');renderShop();}
+  else if(page==='inv'){$('inv-sheet').classList.add('open');renderInv();}
+  else if(page==='stats'){$('stats-sheet').classList.add('open');renderStats();}
+}
+function closeSheets(){
+  ['shop-sheet','inv-sheet','stats-sheet'].forEach(id=>$(id).classList.remove('open'));
+  $('backdrop').classList.remove('vis');
+  document.querySelectorAll('.nav-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+let toastT;
+function toast(msg){
+  const el=$('toast');
+  el.textContent=msg; el.classList.add('vis');
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>el.classList.remove('vis'),2800);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+load(); updateHUD(); initGeo();
+</script>
+</body>
+</html>
