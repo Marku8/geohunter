@@ -79,6 +79,19 @@ const ENV = {
       { name:'Desert Djinn',  e:'🌪️', hp:42, atk:16, def:3,  gold:[25,50], lv:8 },
     ]
   },
+  cemetery: {
+    name: 'Cemetery',
+    emoji: '⚰️',
+    bgColor: '#080810',
+    accentColor: '#604080',
+    monsters: [
+      { name:'Grave Zombie',   e:'🧟', hp:28, atk:7,  def:4,  gold:[10,22], lv:3 },
+      { name:'Bone Archer',    e:'💀', hp:22, atk:10, def:2,  gold:[12,24], lv:4 },
+      { name:'Banshee',        e:'👻', hp:20, atk:13, def:1,  gold:[15,28], lv:5 },
+      { name:'Lich Lord',      e:'🦴', hp:60, atk:18, def:6,  gold:[35,70], lv:10 },
+      { name:'Death Knight',   e:'🪦', hp:45, atk:14, def:10, gold:[25,50], lv:8 },
+    ]
+  },
 };
 
 const SHOP_ITEMS = [
@@ -134,8 +147,11 @@ const ENGAGE_RANGE = 45;
 const WALK_SPEED = 2.5;
 
 // How far monsters spawn from player (min/max meters)
-const SPAWN_MIN = 100;
-const SPAWN_MAX = 320;
+const SPAWN_MIN = 80;
+const SPAWN_MAX = 280;
+
+// Terrain scan radius — Overpass query radius in meters
+const TERRAIN_SCAN_RADIUS = 500;
 
 // Number of monsters to keep on map at once
-const MONSTER_COUNT = 6;
+const MONSTER_COUNT = 8;
