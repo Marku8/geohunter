@@ -170,31 +170,185 @@ function updatePlayerMarkerIcon() {
   if (playerMarker) playerMarker.setIcon(buildPlayerIcon());
 }
 
-// ─── Environment ─────────────────────────────────────────
-async function detectEnvironment(lat, lng) {
+// ═══════════════════════════════════════════════════════════
+//  TERRAIN-AWARE MONSTER SPAWNING via Overpass API
+//  Queries real OSM features and places monsters ON them.
+// ═══════════════════════════════════════════════════════════
+
+// Maps OSM tags → env key
+function tagsToEnv(tags) {
+  const t = tags;
+  const nat  = (t.natural   || '').toLowerCase();
+  const lu   = (t.landuse   || '').toLowerCase();
+  const lei  = (t.leisure   || '').toLowerCase();
+  const ww   = (t.waterway  || '').toLowerCase();
+  const aero = (t.aeroway   || '').toLowerCase();
+  const bld  = (t.building  || '').toLowerCase();
+
+  if (nat === 'water' || nat === 'bay' || nat === 'coastline' ||
+      ww  === 'river' || ww  === 'stream' || ww === 'canal' ||
+      lu  === 'reservoir' || nat === 'wetland' || nat === 'beach')          return 'water';
+
+  if (nat === 'wood'  || nat === 'scrub' || nat === 'grassland' ||
+      lu  === 'forest'|| lu  === 'meadow'||
+      lei === 'park'  || lei === 'garden'|| lei === 'nature_reserve' ||
+      lu  === 'recreation_ground' || lu === 'village_green')                return 'forest';
+
+  if (lu  === 'industrial' || lu  === 'railway' || lu === 'quarry' ||
+      aero=== 'aerodrome'  || nat === 'scree')                              return 'industrial';
+
+  if (lu  === 'cemetery')                                                   return 'cemetery';
+
+  if (nat === 'peak'  || nat === 'cliff' || nat === 'rock' ||
+      nat === 'ridge' || nat === 'fell'  || nat === 'glacier')              return 'mountain';
+
+  if (nat === 'sand'  || nat === 'dune'  || lu === 'salt_pond')             return 'desert';
+
+  if (bld || lu === 'commercial' || lu === 'retail' ||
+      lu  === 'residential')                                                return 'urban';
+
+  return null; // unknown — skip
+}
+
+// Build Overpass query: all interesting terrain within SCAN_RADIUS metres
+function buildOverpassQuery(lat, lng) {
+  const r = TERRAIN_SCAN_RADIUS;
+  const around = `(around:${r},${lat},${lng})`;
+  return `[out:json][timeout:12];
+(
+  way["natural"~"wood|water|scrub|grassland|beach|wetland|sand|cliff|peak|rock"]${around};
+  way["landuse"~"forest|meadow|industrial|cemetery|reservoir|residential|commercial|retail|railway|quarry"]${around};
+  way["leisure"~"park|garden|nature_reserve|recreation_ground"]${around};
+  way["waterway"~"river|stream|canal"]${around};
+  node["natural"~"peak|cliff|spring|tree"]${around};
+  relation["natural"="water"]${around};
+  relation["landuse"="forest"]${around};
+  relation["leisure"="nature_reserve"]${around};
+);
+out center tags;`;
+}
+
+// Extract center lat/lng from an Overpass element
+function elemCenter(el) {
+  if (el.type === 'node') return { lat: el.lat, lng: el.lon };
+  if (el.center)          return { lat: el.center.lat, lng: el.center.lon };
+  return null;
+}
+
+// Scatter a spawn point slightly off the feature centre so
+// multiple monsters on the same feature don't pile up.
+function jitter(lat, lng, maxM = 40) {
+  return offsetPos(lat, lng, Math.random() * maxM, Math.random() * 360);
+}
+
+// Cache: { lat, lng, radius } → [ {env, lat, lng} ]
+let terrainCache = null;
+let terrainCachePos = null;
+
+async function fetchTerrain(lat, lng) {
+  // Use cache if player hasn't moved more than TERRAIN_SCAN_RADIUS/3
+  if (terrainCachePos &&
+      haversine(lat, lng, terrainCachePos.lat, terrainCachePos.lng) < TERRAIN_SCAN_RADIUS / 3) {
+    return terrainCache;
+  }
+
   try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=16`,
-      { headers: { 'Accept-Language': 'en' } }
-    );
-    const d = await res.json();
-    const cls  = (d.class || '').toLowerCase();
-    const type = (d.type  || '').toLowerCase();
-    const name = (d.display_name || '').toLowerCase();
-    let env = 'urban';
-    if (cls==='waterway'||type==='water'||type==='bay'||name.includes('river')||name.includes('lake')||name.includes('sea')||name.includes('ocean')||name.includes('beach')) env='water';
-    else if (cls==='leisure'||type==='park'||type==='forest'||type==='wood'||cls==='natural'||name.includes('park')||name.includes('forest')||name.includes('garden')) env='forest';
-    else if ((cls==='landuse'&&type==='industrial')||name.includes('industrial')||name.includes('factory')) env='industrial';
-    else if (type==='peak'||type==='cliff'||name.includes('mountain')||name.includes('hill')) env='mountain';
-    else if (name.includes('desert')||name.includes('dune')||name.includes('sand')) env='desert';
-    if (env !== G.env) {
-      G.env = env;
-      showToast(`Entered ${ENV[env].emoji} ${ENV[env].name} zone!`);
-      respawnAllMonsters();
-    } else { G.env = env; }
-    G.lastEnvCheckPos = { lat, lng };
+    const query = buildOverpassQuery(lat, lng);
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: query,
+    });
+    const data = await res.json();
+    const spots = [];
+
+    for (const el of data.elements) {
+      const env = tagsToEnv(el.tags || {});
+      if (!env) continue;
+      const c = elemCenter(el);
+      if (!c) continue;
+      // Only keep spots within range
+      if (haversine(lat, lng, c.lat, c.lng) > TERRAIN_SCAN_RADIUS) continue;
+      spots.push({ env, lat: c.lat, lng: c.lng, name: el.tags?.name || null });
+    }
+
+    terrainCache    = spots;
+    terrainCachePos = { lat, lng };
+    return spots;
+  } catch(e) {
+    return terrainCache || [];
+  }
+}
+
+// Main smart spawn — places monsters ON real terrain features
+async function spawnSmartMonsters() {
+  if (monsters.length >= MONSTER_COUNT) return;
+  const needed = MONSTER_COUNT - monsters.length;
+
+  const spots = await fetchTerrain(G.pos.lat, G.pos.lng);
+
+  // Track which env zones we found — show a hint the first time
+  const envsFound = [...new Set(spots.map(s => s.env))];
+  if (envsFound.length > 0 && !G._shownTerrainHint) {
+    G._shownTerrainHint = true;
+    const labels = envsFound.map(e => `${ENV[e]?.emoji||'?'} ${ENV[e]?.name||e}`).join('  ');
+    showToast(`Terrain detected: ${labels}`, 3500);
+  }
+
+  // Update HUD env to most common terrain type around player
+  if (envsFound.length > 0) {
+    const freq = {};
+    spots.forEach(s => { freq[s.env] = (freq[s.env]||0) + 1; });
+    const dominant = Object.keys(freq).sort((a,b) => freq[b]-freq[a])[0];
+    G.env = dominant;
     updateHUD();
-  } catch(e) { G.lastEnvCheckPos = { lat, lng }; }
+  }
+
+  // Build a weighted spawn list: each terrain spot can host 1-3 monsters
+  const spawnList = [];
+  for (const spot of spots) {
+    const pool = ENV[spot.env]?.monsters;
+    if (!pool) continue;
+    const count = 1 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < count; i++) {
+      spawnList.push({ env: spot.env, lat: spot.lat, lng: spot.lng });
+    }
+  }
+
+  // Shuffle
+  for (let i = spawnList.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i+1));
+    [spawnList[i], spawnList[j]] = [spawnList[j], spawnList[i]];
+  }
+
+  // Pick needed monsters from the list
+  let placed = 0;
+  for (const slot of spawnList) {
+    if (placed >= needed) break;
+    if (monsters.length >= MONSTER_COUNT) break;
+
+    const pool = ENV[slot.env].monsters;
+    const base = pool[Math.floor(Math.random() * pool.length)];
+    const pos  = jitter(slot.lat, slot.lng, 35);
+
+    // Don't spawn on top of player
+    if (haversine(G.pos.lat, G.pos.lng, pos.lat, pos.lng) < 30) continue;
+    // Don't stack on existing monsters
+    if (monsters.some(m => haversine(m.lat, m.lng, pos.lat, pos.lng) < 20)) continue;
+
+    addMonsterToMap({ ...base, id: nextMonsterId++, homeEnv: slot.env }, pos.lat, pos.lng);
+    placed++;
+  }
+
+  // If terrain had nothing (sparse area), fall back to urban scatter
+  if (placed < needed) {
+    const remaining = needed - placed;
+    const pool = ENV['urban'].monsters;
+    for (let i = 0; i < remaining; i++) {
+      const base = pool[Math.floor(Math.random() * pool.length)];
+      const pos  = nearbyRandom(G.pos.lat, G.pos.lng);
+      addMonsterToMap({ ...base, id: nextMonsterId++, homeEnv: 'urban' }, pos.lat, pos.lng);
+    }
+  }
 }
 
 // ─── Map ─────────────────────────────────────────────────
@@ -208,26 +362,19 @@ function initMap(lat, lng) {
     maxZoom: 19, subdomains: 'abcd',
   }).addTo(map);
   playerMarker = L.marker([lat, lng], { icon: buildPlayerIcon(), zIndexOffset: 1000 }).addTo(map);
-  spawnMonsters();
-  detectEnvironment(lat, lng);
+  spawnSmartMonsters();
 }
 
-// ─── Monsters ────────────────────────────────────────────
-function spawnMonsters() {
-  const needed = MONSTER_COUNT - monsters.length;
-  if (needed <= 0) return;
-  const pool = ENV[G.env].monsters;
-  for (let i = 0; i < needed; i++) {
-    const base = pool[Math.floor(Math.random() * pool.length)];
-    const pos  = nearbyRandom(G.pos.lat, G.pos.lng);
-    addMonsterToMap({ ...base, id: nextMonsterId++ }, pos.lat, pos.lng);
-  }
-}
-
+// ─── Monster helpers ─────────────────────────────────────
 function addMonsterToMap(mon, lat, lng) {
+  const envData = ENV[mon.homeEnv] || ENV['urban'];
   const icon = L.divIcon({
-    html: `<div class="mon-marker"><div class="mon-m-emoji">${mon.e}</div><div class="mon-m-tag">${mon.name}</div></div>`,
-    className: '', iconSize: [48, 54], iconAnchor: [24, 27],
+    html: `<div class="mon-marker mon-env-${mon.homeEnv}">
+             <div class="mon-m-emoji">${mon.e}</div>
+             <div class="mon-m-tag">${mon.name}</div>
+             <div class="mon-m-habitat">${envData.emoji}</div>
+           </div>`,
+    className: '', iconSize: [52, 60], iconAnchor: [26, 30],
   });
   const mark = L.marker([lat, lng], { icon }).addTo(map);
   mark.on('click', () => { if (!battle) engageBattle(mon, mark, monsters.find(m => m.marker === mark)); });
@@ -242,7 +389,8 @@ function removeMonster(entry) {
 function respawnAllMonsters() {
   monsters.forEach(m => map.removeLayer(m.marker));
   monsters = [];
-  spawnMonsters();
+  terrainCache = null; // force re-query
+  spawnSmartMonsters();
 }
 
 function checkProximity() {
@@ -349,13 +497,15 @@ function startMoveLoop() {
     playerMarker.setLatLng([G.pos.lat, G.pos.lng]);
     map.setView([G.pos.lat, G.pos.lng], map.getZoom(), { animate: false });
 
-    if (G.lastEnvCheckPos &&
-        haversine(G.pos.lat, G.pos.lng, G.lastEnvCheckPos.lat, G.lastEnvCheckPos.lng) > 200) {
-      detectEnvironment(G.pos.lat, G.pos.lng);
+    // Re-scan terrain when player moves far enough
+    if (!terrainCachePos ||
+        haversine(G.pos.lat, G.pos.lng, terrainCachePos.lat, terrainCachePos.lng) > TERRAIN_SCAN_RADIUS / 3) {
+      spawnSmartMonsters();
     }
 
     checkProximity();
-    if (monsters.length < Math.floor(MONSTER_COUNT * 0.5)) spawnMonsters();
+    if (monsters.length < Math.floor(MONSTER_COUNT * 0.5)) spawnSmartMonsters();
+
   }, 80);
 }
 
@@ -439,7 +589,7 @@ function onMonsterKilled() {
   battle = null;
   document.getElementById('battle').classList.remove('open');
   setTimeout(showLootScreen, 420);
-  setTimeout(spawnMonsters, 3000);
+  setTimeout(spawnSmartMonsters, 3000);
   saveGame();
 }
 
