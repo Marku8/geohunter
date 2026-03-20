@@ -163,8 +163,26 @@
     /* ── Monster markers ──────────────────────────────── */
     .mon-marker    { display:flex; flex-direction:column; align-items:center; cursor:pointer; animation:mfloat 3s ease-in-out infinite; }
     @keyframes mfloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
-    .mon-m-emoji  { font-size:2rem; filter:drop-shadow(0 0 6px rgba(255,60,60,.75)); line-height:1; }
-    .mon-m-tag    { font-size:.52rem; font-weight:700; white-space:nowrap; background:rgba(0,0,0,.82); color:#ff9090; border:1px solid rgba(255,60,60,.4); padding:1px 5px; border-radius:4px; margin-top:2px; }
+    .mon-m-emoji   { font-size:2rem; filter:drop-shadow(0 0 6px rgba(255,60,60,.75)); line-height:1; }
+    .mon-m-tag     { font-size:.52rem; font-weight:700; white-space:nowrap; background:rgba(0,0,0,.85); color:#ff9090; border:1px solid rgba(255,60,60,.4); padding:1px 5px; border-radius:4px; margin-top:1px; }
+    .mon-m-habitat { font-size:.7rem; line-height:1; margin-top:1px; }
+
+    /* Env tint on the drop-shadow */
+    .mon-env-water      .mon-m-emoji { filter:drop-shadow(0 0 7px rgba(30,120,255,.8)); }
+    .mon-env-forest     .mon-m-emoji { filter:drop-shadow(0 0 7px rgba(30,180,60,.8)); }
+    .mon-env-industrial .mon-m-emoji { filter:drop-shadow(0 0 7px rgba(220,120,20,.8)); }
+    .mon-env-mountain   .mon-m-emoji { filter:drop-shadow(0 0 7px rgba(160,180,200,.8)); }
+    .mon-env-desert     .mon-m-emoji { filter:drop-shadow(0 0 7px rgba(210,170,30,.8)); }
+    .mon-env-cemetery   .mon-m-emoji { filter:drop-shadow(0 0 7px rgba(140,60,200,.9)); }
+    .mon-env-urban      .mon-m-emoji { filter:drop-shadow(0 0 7px rgba(255,40,40,.75)); }
+
+    .mon-env-water      .mon-m-tag { border-color:rgba(30,120,255,.5);  color:#88aaff; }
+    .mon-env-forest     .mon-m-tag { border-color:rgba(30,180,60,.5);   color:#88ff99; }
+    .mon-env-industrial .mon-m-tag { border-color:rgba(220,120,20,.5);  color:#ffbb66; }
+    .mon-env-mountain   .mon-m-tag { border-color:rgba(160,180,200,.4); color:#ccddee; }
+    .mon-env-desert     .mon-m-tag { border-color:rgba(210,170,30,.5);  color:#ffdd88; }
+    .mon-env-cemetery   .mon-m-tag { border-color:rgba(140,60,200,.5);  color:#cc88ff; }
+    .mon-env-urban      .mon-m-tag { border-color:rgba(255,60,60,.4);   color:#ff9090; }
 
     /* ── Battle ───────────────────────────────────────── */
     #battle {
